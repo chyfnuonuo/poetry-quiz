@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -69,6 +69,13 @@
         .group-btns{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}
         .group-btn{padding:16px;font-size:1rem;background:var(--card);border:2px solid var(--primary);border-radius:var(--r);color:var(--primary);font-family:var(--fd);cursor:pointer}
         .group-btn:active{background:var(--primary);color:#fff}
+        .install-banner{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 2px 12px rgba(43,36,24,.12);display:none;position:relative;border-left:4px solid var(--secondary)}
+        .install-banner.on{display:block}
+        .install-banner .ib-close{position:absolute;top:8px;right:12px;font-size:1.2rem;color:var(--tl);cursor:pointer;padding:4px 8px}
+        .install-banner .ib-title{font-weight:700;font-size:.95rem;color:var(--primary);margin-bottom:8px;padding-right:24px}
+        .install-banner .ib-steps{font-size:.82rem;color:var(--tl);line-height:1.8}
+        .install-banner .ib-steps span{display:inline-block;background:var(--primary);color:#fff;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;font-size:.72rem;margin-right:6px}
+        .install-banner .ib-btn{margin-top:10px;display:block;width:100%;padding:10px;font-size:.9rem;background:var(--secondary);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer}
         @media(min-width:768px){.grid{max-width:400px}.gc{font-size:1.8rem}.q-stem{font-size:1.6rem}.page{padding:24px 32px}}
         @media(max-width:480px){
             body{font-size:14px;padding-bottom:64px}
@@ -122,6 +129,12 @@
             <button class="group-btn" style="padding:12px 8px;font-size:0.88rem" onclick="startCatQuiz(11)">👶 童真童趣</button>
             <button class="group-btn" style="padding:12px 8px;font-size:0.88rem" onclick="startCatQuiz(12)">💕 美好爱情</button>
             <button class="group-btn" style="padding:12px 8px;font-size:0.88rem" onclick="startCatQuiz(13)">🌟 近现代</button>
+        </div>
+        <div class="install-banner" id="install-banner">
+            <span class="ib-close" onclick="dismissInstall()">&times;</span>
+            <div class="ib-title" id="ib-title">📱 添加到主屏幕</div>
+            <div class="ib-steps" id="ib-steps"></div>
+            <button class="ib-btn" id="ib-btn" style="display:none" onclick="installApp()">📲 一键安装</button>
         </div>
     </div>
 
@@ -1619,86 +1632,13 @@
             showPage('home');
         }
 
-        function startCatQuiz(cat) {
-            errPracticeQueue = []; errPracticeIdx = 0; // 重置错题练习状态，防止"下一题"按钮调用错handler
-            currentCategory = cat;
-            currentScore = 0;
-            currentQuestionIndex = 0;
-            currentQuestions = [];
-            const pool = poetryDB.filter(p => p.category === cat);
-            if (pool.length < 5) { alert('该分类诗目不足，请选其他'); return; }
-            const usedForCat = new Set();
-            for (let i = 0; i < 10; i++) {
-                let q = null;
-                let attempts = 0;
-                while (!q && attempts < 50) {
-                    const candidate = pool[Math.floor(Math.random() * pool.length)];
-                    q = generateQuestionFromPoem(candidate);
-                    if (q && q.poemTitle) {
-                        const key = q.poemTitle + '|' + q.question.substring(0, 20);
-                        if (usedForCat.has(key)) { q = null; } else { usedForCat.add(key); }
-                    }
-                    attempts++;
-                }
-                if (q) currentQuestions.push(q);
-            }
-            showPage('quiz');
-            document.getElementById('cat-label').textContent = CATEGORY_NAMES[cat] + '专项';
-            document.getElementById('cat-label').style.display = 'block';
-            nextQ();
-        }
-
-        function generateQuestionFromPoem(poem) {
-            const saved = currentCategory; currentCategory = null;
-            const pool_orig = getPoemPool;
-            // Direct generation without pool filter
-            const rand = Math.random();
-            let q = null;
-            if (rand < 0.4) q = generateCompletionFromPoem(poem);
-            else if (rand < 0.65) q = generateLiteratureFromPoem(poem);
-            else q = generateGridFromPoem(poem);
-            currentCategory = saved;
-            return q;
-        }
-
-        function generateCompletionFromPoem(poem) {
-            const idx = Math.floor(Math.random() * poem.sentences.length);
-            if (idx >= poem.sentences.length - 1) return null;
-            return { type: 'completion', question: '"' + poem.sentences[idx] + '" ——请写出下一句', answer: poem.sentences[idx + 1], hint: poem.title + ' · ' + poem.author, time: 60, score: 10, poemTitle: poem.title };
-        }
-
-        function generateLiteratureFromPoem(poem) {
-            const sentence = poem.sentences[Math.floor(Math.random() * poem.sentences.length)];
-            const correctAuthor = poem.author;
-            const otherAuthors = [];
-            const allAuthors = getAllAuthors();
-            for (let i = 0; i < allAuthors.length && otherAuthors.length < 3; i++) {
-                if (allAuthors[i] !== correctAuthor) otherAuthors.push(allAuthors[i]);
-            }
-            const options = [correctAuthor, ...otherAuthors].sort(() => Math.random() - 0.5);
-            return { type: 'literature', question: '"' + sentence + '" ——作者是？', options: options, answer: options.indexOf(correctAuthor), hint: poem.title, time: 30, score: 10, poemTitle: poem.title };
-        }
-
-        function generateGridFromPoem(poem) {
-            const candidates = poem.sentences.filter(s => { const c = s.replace(/[，。？！、；：""''【】《》（）\s]/g, ''); return c.length >= 5 && c.length <= 7; });
-            if (candidates.length === 0) return null;
-            const selected = candidates[Math.floor(Math.random() * candidates.length)];
-            const chars = [];
-            for (let i = 0; i < selected.length; i++) { const c = selected[i]; if (c >= '\u4e00' && c <= '\u9fff') chars.push(c); }
-            if (chars.length < 5) return null;
-            const targetChars = chars.slice(0, Math.min(7, chars.length));
-            const distractors = [];
-            const allChars = '天地日月山水风云花鸟鱼虫人';
-            while (distractors.length < 5) { const c = allChars[Math.floor(Math.random() * allChars.length)]; if (targetChars.indexOf(c) === -1 && distractors.indexOf(c) === -1) distractors.push(c); }
-            const grid = [...targetChars, ...distractors].sort(() => Math.random() - 0.5);
-            return { type: 'grid', question: '请从九宫格中选出正确诗句（' + targetChars.length + '字）', grid: grid.slice(0, 12), answer: targetChars.join(''), hint: poem.title + ' · ' + poem.author, time: 45, score: 10, poemTitle: poem.title };
-        }
 
         function startCatQuiz(cat) {
             errPracticeQueue = []; errPracticeIdx = 0; // 重置错题练习状态，防止"下一题"按钮调用错handler
+            stopTimer();
             currentCategory = cat;
             currentScore = 0;
-            currentQuestionIndex = 0;
+            currentQuestionIndex = -1;
             currentQuestions = [];
             const pool = poetryDB.filter(p => p.category === cat);
             if (pool.length < 3) { alert('该分类诗目不足（需≥3首），请选其他分类'); return; }
@@ -1765,8 +1705,9 @@
         }
 
         function startQuiz(mode) {
+            stopTimer();
             currentScore = 0;
-            currentQuestionIndex = 0;
+            currentQuestionIndex = -1;
             if (mode === 'practice') {
                 errPracticeQueue = []; errPracticeIdx = 0; // 重置错题练习状态
                 currentCategory = null;
@@ -1819,8 +1760,9 @@
 
         function startFullGame() {
             errPracticeQueue = []; errPracticeIdx = 0; // 重置错题练习状态
+            stopTimer();
             currentScore = 0;
-            currentQuestionIndex = 0;
+            currentQuestionIndex = -1;
             usedQuestions = [];
             teamCurrentPlayer = 1;
             if (questionPool.length < 38) {
@@ -1895,7 +1837,8 @@
                     clearTimer();
                     const q = currentQuestions[currentQuestionIndex];
                     if (!q) return;
-                    if (q.type === 'completion' || q.type === 'situational') submitS(true);
+                    if (q.type === 'completion') submitA(true);
+                    else if (q.type === 'situational') submitS(true);
                     else if (q.type === 'literature') submitO(-1, true);
                     else if (q.type === 'grid') submitG(true);
                 }
@@ -1912,16 +1855,26 @@
             showPage('result-page');
         }
 
-        function saveError(question, userAnswer, correctAnswer) {
+        function saveError(question, userAnswer, correctAnswer, qObj) {
             try {
                 let errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
-                errors.push({
+                var entry = {
                     q: question,
                     a: userAnswer,
                     c: correctAnswer || '',
                     n: 0,
-                    t: new Date().toLocaleString()
-                });
+                    t: new Date().toLocaleString(),
+                    type: qObj ? qObj.type : 'completion'
+                };
+                if (qObj) {
+                    if (qObj.type === 'grid') {
+                        entry.grid = window._gridChars || [];
+                    } else if (qObj.type === 'literature') {
+                        entry.options = qObj.options || [];
+                        entry.ansIdx = qObj.answer;
+                    }
+                }
+                errors.push(entry);
                 if (errors.length > 200) {
                     errors = errors.slice(-200);
                 }
@@ -2035,9 +1988,10 @@
         let errPracticeIdx = 0;
 
         function startErrorPractice() {
+            stopTimer();
             const errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
             if (errors.length === 0) { alert('没有错题可练习！'); return; }
-            errPracticeQueue = errors.map((e,i) => ({ ...e, _origIdx: i }));
+            errPracticeQueue = errors.map(function(e) { return Object.assign({}, e); });
             errPracticeIdx = 0;
             currentScore = 0;
             showPage('quiz');
@@ -2068,8 +2022,21 @@
             if (qc) qc.classList.remove('qc-ok','qc-no','shake');
             if (nb) nb.style.display = 'none';
             if (qb) {
-                qb.innerHTML = '<input class="input" id="ai" placeholder="请输入答案..." autocomplete="off">' +
-                    '<button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="submitErrP()">提交</button>';
+                if (err.type === 'grid' && err.grid && err.grid.length > 0) {
+                    window._errGridChars = err.grid;
+                    window._errGridAns = err.c;
+                    window._errGridPicked = [];
+                    qb.innerHTML = '<div class="gp" id="gpv"></div><div class="grid">' +
+                        err.grid.map(function(c, i) { return '<div class="gc" onclick="pickErrG(' + i + ')">' + c + '</div>'; }).join('') +
+                        '</div><button class="btn btn-outline" style="margin:10px auto;width:auto" onclick="clearErrG()">清除重选</button>';
+                } else if (err.type === 'literature' && err.options && err.options.length > 0) {
+                    qb.innerHTML = '<div class="opts">' +
+                        err.options.map(function(o, i) { return '<div class="opt-btn" onclick="submitErrO(' + i + ')">' + o + '</div>'; }).join('') +
+                        '</div>';
+                } else {
+                    qb.innerHTML = '<input class="input" id="ai" placeholder="请输入答案..." autocomplete="off">' +
+                        '<button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="submitErrP()">提交</button>';
+                }
             }
             document.getElementById('ai')?.focus();
         }
@@ -2078,8 +2045,9 @@
             const inp = document.getElementById('ai');
             const ua = inp ? inp.value.trim() : '';
             const err = errPracticeQueue[errPracticeIdx];
-            const norm = s => s.replace(/[，。？！、；：""''【】《》（）\s,\.\?!;:'"()\[\]{}]/g, '');
-            const ok = ua === err.c || norm(ua) === norm(err.c) || norm(ua).includes(norm(err.c));
+            const correctAnswer = err.c || '';
+            const norm = s => (s || '').replace(/[，。？！、；：""''【】《》（）\s,\.\?!;:'"()\[\]{}]/g, '');
+            const ok = ua === correctAnswer || norm(ua) === norm(correctAnswer) || norm(ua).includes(norm(correctAnswer));
             const fb = document.getElementById('fb');
             const nb = document.getElementById('nb');
             const qc = document.getElementById('qc');
@@ -2090,19 +2058,131 @@
                 // update localStorage
                 try {
                     let errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
-                    if (err._origIdx < errors.length) {
-                        errors[err._origIdx].n = err.n;
-                        if (err.n >= 3) errors.splice(err._origIdx, 1);
+                    var idx = errors.findIndex(function(e) { return e.q === err.q; });
+                    if (idx >= 0) {
+                        errors[idx].n = err.n;
+                        if (err.n >= 3) errors.splice(idx, 1);
                         localStorage.setItem('poetryErrors', JSON.stringify(errors));
                     }
                 } catch(e) {}
             } else {
-                if (fb) { fb.classList.add('on','no'); fb.innerHTML = '❌ 错误<div class="ca">正确答案：' + err.c + '</div>'; }
+                if (fb) { fb.classList.add('on','no'); fb.innerHTML = '❌ 错误<div class="ca">正确答案：' + correctAnswer + '</div>'; }
                 // reset count
                 err.n = 0;
                 try {
                     let errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
-                    if (err._origIdx < errors.length) { errors[err._origIdx].n = 0; localStorage.setItem('poetryErrors', JSON.stringify(errors)); }
+                    var idx = errors.findIndex(function(e) { return e.q === err.q; });
+                    if (idx >= 0) { errors[idx].n = 0; localStorage.setItem('poetryErrors', JSON.stringify(errors)); }
+                } catch(e) {}
+            }
+            if (qc) { qc.classList.add(ok ? 'qc-ok' : 'qc-no'); if (!ok) qc.classList.add('shake'); }
+            if (nb) nb.style.display = 'block';
+            nb.onclick = function() {
+                errPracticeIdx++;
+                document.getElementById('qz-score').textContent = currentScore + ' 分';
+                renderErrPracticeQuestion();
+            };
+        }
+
+        function pickErrG(i) {
+            var cells = document.querySelectorAll('.gc');
+            var chars = window._errGridChars;
+            var picked = window._errGridPicked;
+            if (cells[i].classList.contains('pk')) {
+                cells[i].classList.remove('pk');
+                var idx = picked.indexOf(i);
+                if (idx > -1) picked.splice(idx, 1);
+            } else {
+                cells[i].classList.add('pk');
+                picked.push(i);
+            }
+            var gpv = document.getElementById('gpv');
+            if (gpv) gpv.textContent = picked.map(function(j) { return chars[j]; }).join('');
+            if (picked.length === window._errGridAns.length) {
+                setTimeout(submitErrG, 300);
+            }
+        }
+
+        function clearErrG() {
+            window._errGridPicked = [];
+            document.querySelectorAll('.gc.pk').forEach(function(c) { c.classList.remove('pk'); });
+            var gpv = document.getElementById('gpv');
+            if (gpv) gpv.textContent = '';
+        }
+
+        function submitErrG() {
+            var err = errPracticeQueue[errPracticeIdx];
+            var sel = window._errGridPicked.map(function(j) { return window._errGridChars[j]; }).join('');
+            var correctAns = err.c || '';
+            var ok = sel === correctAns;
+            document.querySelectorAll('.gc.pk').forEach(function(c) { c.classList.add(ok ? 'ri' : 'wr'); });
+            var fb = document.getElementById('fb');
+            var nb = document.getElementById('nb');
+            var qc = document.getElementById('qc');
+            if (ok) {
+                currentScore += 10;
+                err.n = (err.n || 0) + 1;
+                if (fb) { fb.classList.add('on','ok'); fb.innerHTML = '✅ 正确！+10分' + (err.n >= 3 ? ' 🗑 已移除' : ' （' + err.n + '/3）'); }
+                try {
+                    var errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
+                    var idx = errors.findIndex(function(e) { return e.q === err.q; });
+                    if (idx >= 0) {
+                        errors[idx].n = err.n;
+                        if (err.n >= 3) errors.splice(idx, 1);
+                        localStorage.setItem('poetryErrors', JSON.stringify(errors));
+                    }
+                } catch(e) {}
+            } else {
+                if (fb) { fb.classList.add('on','no'); fb.innerHTML = '❌ 错误<div class="ca">正确答案：' + correctAns + '</div>'; }
+                err.n = 0;
+                try {
+                    var errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
+                    var idx = errors.findIndex(function(e) { return e.q === err.q; });
+                    if (idx >= 0) { errors[idx].n = 0; localStorage.setItem('poetryErrors', JSON.stringify(errors)); }
+                } catch(e) {}
+            }
+            if (qc) { qc.classList.add(ok ? 'qc-ok' : 'qc-no'); if (!ok) qc.classList.add('shake'); }
+            if (nb) nb.style.display = 'block';
+            nb.onclick = function() {
+                errPracticeIdx++;
+                document.getElementById('qz-score').textContent = currentScore + ' 分';
+                renderErrPracticeQuestion();
+            };
+        }
+
+        function submitErrO(idx) {
+            var err = errPracticeQueue[errPracticeIdx];
+            var correctAns = err.c || '';
+            var correctIdx = err.ansIdx != null ? err.ansIdx : (err.options ? err.options.indexOf(correctAns) : -1);
+            var ok = idx === correctIdx;
+            var btns = document.querySelectorAll('.opt-btn');
+            for (var i = 0; i < btns.length; i++) {
+                if (i === correctIdx) btns[i].classList.add('ri');
+                if (i === idx && !ok) btns[i].classList.add('wr');
+            }
+            var fb = document.getElementById('fb');
+            var nb = document.getElementById('nb');
+            var qc = document.getElementById('qc');
+            if (ok) {
+                currentScore += 10;
+                err.n = (err.n || 0) + 1;
+                if (fb) { fb.classList.add('on','ok'); fb.innerHTML = '✅ 正确！+10分' + (err.n >= 3 ? ' 🗑 已移除' : ' （' + err.n + '/3）'); }
+                try {
+                    var errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
+                    var idx = errors.findIndex(function(e) { return e.q === err.q; });
+                    if (idx >= 0) {
+                        errors[idx].n = err.n;
+                        if (err.n >= 3) errors.splice(idx, 1);
+                        localStorage.setItem('poetryErrors', JSON.stringify(errors));
+                    }
+                } catch(e) {}
+            } else {
+                if (fb) { fb.classList.add('on','no'); fb.innerHTML = '❌ 错误<div class="ca">正确答案：' + correctAns + '</div>'; }
+                err.n = 0;
+                try {
+                    var errors = JSON.parse(localStorage.getItem('poetryErrors') || '[]');
+                    var idx = errors.findIndex(function(e) { return e.q === err.q; });
+                    if (idx >= 0) { errors[idx].n = 0; localStorage.setItem('poetryErrors', JSON.stringify(errors)); }
                 } catch(e) {}
             }
             if (qc) { qc.classList.add(ok ? 'qc-ok' : 'qc-no'); if (!ok) qc.classList.add('shake'); }
@@ -2179,33 +2259,6 @@
             }
             const hint = available[Math.floor(Math.random() * available.length)];
             const confirmShow = confirm('提示：' + hint.poem + '\n—— ' + hint.author + '《' + hint.source + '》\n\n点击确定使用此提示（不计入已说）');
-        }
-
-        function submitFeihua() {
-            const input = document.getElementById('feihualing-input').value.trim();
-            if (!input) return;
-            if (!input.includes(feihuaToken)) {
-                alert('诗句中必须包含"' + feihuaToken + '"字！');
-                return;
-            }
-            if (feihuaUsed.includes(input)) {
-                alert('这句已经说过了！');
-                return;
-            }
-            feihuaUsed.push(input);
-            const list = document.getElementById('feihualing-list');
-            const item = document.createElement('div');
-            item.className = 'poem-item';
-            item.textContent = input;
-            list.insertBefore(item, list.firstChild);
-            document.getElementById('feihualing-input').value = '';
-            const remaining = feihuaDatabase[feihuaToken] ? feihuaDatabase[feihuaToken].length - feihuaUsed.length : 0;
-            document.getElementById('feihualing-count').textContent = '已说 ' + feihuaUsed.length + ' 句，剩余约 ' + remaining + ' 句';
-            document.getElementById('feihualing-answer').textContent = '太棒了！继续...';
-        }
-
-        function exitFeihua() {
-            showPage('practice-page');
         }
 
         let fhlTimerInterval = null;
@@ -2480,7 +2533,7 @@
             if (ok) {
                 currentScore += q.score || 10;
             } else {
-                saveError(q.question, ua || (timeout ? '(超时未答)' : ''), q.answer);
+                saveError(q.question, ua || (timeout ? '(超时未答)' : ''), q.answer, q);
             }
             const fb = document.getElementById('fb');
             const nb = document.getElementById('nb');
@@ -2508,7 +2561,7 @@
             if (ok) {
                 currentScore += q.score || 10;
             } else {
-                saveError(q.question, ua || (timeout ? '(超时未答)' : ''), q.answer);
+                saveError(q.question, ua || (timeout ? '(超时未答)' : ''), q.answer, q);
             }
             const fb = document.getElementById('fb');
             const nb = document.getElementById('nb');
@@ -2537,7 +2590,7 @@
                 currentScore += q.score || 10;
             } else {
                 const userPick = (idx >= 0 && q.options && q.options[idx]) ? q.options[idx] : (timeout ? '(超时未答)' : '(未选择)');
-                saveError(q.question, userPick, q.options[q.answer]);
+                saveError(q.question, userPick, q.options[q.answer], q);
             }
             const fb = document.getElementById('fb');
             const nb = document.getElementById('nb');
@@ -2588,7 +2641,7 @@
             document.querySelectorAll('.gc.pk').forEach(c => c.classList.add(ok ? 'ri' : 'wr'));
             showAnswerFeedback(ok, q.answer, timeout);
             if (!ok) {
-                saveError(q.question, sel || (timeout ? '(超时未答)' : '(未选择)'), q.answer);
+                saveError(q.question, sel || (timeout ? '(超时未答)' : '(未选择)'), q.answer, q);
             }
             if (ok) {
                 currentScore += q.score || 10;
@@ -2619,29 +2672,65 @@
             showErrorBook();
         }
 
-        document.addEventListener('keydown', (e) => {
+        document.addEventListener('keydown', function(e) {
             if (e.key >= '1' && e.key <= '4') {
-                const idx = parseInt(e.key) - 1;
-                const buttons = document.querySelectorAll('.option-btn');
+                var idx = parseInt(e.key) - 1;
+                var buttons = document.querySelectorAll('.opt-btn');
                 if (buttons[idx]) buttons[idx].click();
             }
             if (e.key === ' ' || e.key === 'Enter') {
-                e.preventDefault();
-                const skipBtn = document.getElementById('skip-btn');
-                if (skipBtn && skipBtn.offsetParent !== null) {
-                    skipBtn.click();
-                }
-                if (document.getElementById('feihualing-page').classList.contains('active')) {
-                    submitFeihua();
+                var fhlPage = document.getElementById('fhl');
+                if (fhlPage && fhlPage.classList.contains('on')) {
+                    e.preventDefault();
+                    fhlCheck();
                 }
             }
         });
 
+        // ---- PWA install guide ----
+        var deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            deferredPrompt = e;
+            var btn = document.getElementById('ib-btn');
+            if (btn) btn.style.display = 'block';
+        });
+
+        window.installApp = function() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(function(r) { deferredPrompt = null; });
+            }
+        };
+
+        window.dismissInstall = function() {
+            document.getElementById('install-banner').classList.remove('on');
+            try { localStorage.setItem('pq_install_dismissed', '1'); } catch(e) {}
+        };
+
+        (function showInstallGuide() {
+            try {
+                if (localStorage.getItem('pq_install_dismissed')) return;
+            } catch(e) {}
+            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            var isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+            if (isStandalone) return;
+            var banner = document.getElementById('install-banner');
+            var steps = document.getElementById('ib-steps');
+            if (!banner || !steps) return;
+            if (isIOS) {
+                document.getElementById('ib-title').textContent = '📱 添加到主屏幕';
+                steps.innerHTML = '<span>1</span> 点底部 <b>分享按钮</b><br><span>2</span> 滑动找到 <b>「添加到主屏幕」</b><br><span>3</span> 点右上角「添加」';
+            } else {
+                document.getElementById('ib-title').textContent = '📱 像 App 一样使用';
+                steps.innerHTML = '<span>1</span> 点浏览器菜单 <b>⋮</b><br><span>2</span> 点 <b>「添加到主屏幕」</b><br><span>3</span> 桌面点图标即开';
+            }
+            banner.classList.add('on');
+        })();
+
         // PWA service worker registration (silently skip if not supported or file:// protocol)
         if ('serviceWorker' in navigator) {
-            try {
-                navigator.serviceWorker.register('sw.js').catch(function(){});
-            } catch(e) {}
+            try { navigator.serviceWorker.register('sw.js').catch(function(){}); } catch(e) {}
         }
 
     </script>
